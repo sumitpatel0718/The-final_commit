@@ -44,9 +44,7 @@ vector<double> svi_total_variance(const vector<double>& params, const vector<dou
 
 // =====================================================================
 // def objective(p): 
-// FIX: We use <double, Eigen::Dynamic, Eigen::Dynamic> here to ensure 
-// the internal Jacobian is fully dynamic (Eigen::MatrixXd).
-// This completely solves the lvalue reference compile error.
+// Optimized to calculate inline. Eliminates memory allocation overhead.
 // =====================================================================
 struct objective : Functor<double, Eigen::Dynamic, Eigen::Dynamic> {
     const vector<double>& k;
@@ -56,14 +54,15 @@ struct objective : Functor<double, Eigen::Dynamic, Eigen::Dynamic> {
         : Functor<double, Eigen::Dynamic, Eigen::Dynamic>(5, k_.size()), k(k_), total_var(tv_) {}
 
     int operator()(const Eigen::VectorXd& p, Eigen::VectorXd& fvec) const {
-        vector<double> params = {p[0], p[1], p[2], p[3], p[4]};
-        vector<double> model = svi_total_variance(params, k);
-
+        double a = p[0], b = p[1], rho = p[2], m = p[3], sigma = p[4];
+        
         double lb[5] = {1e-8, 1e-8, -0.999, -1.0, 1e-6};
         double ub[5] = {5.0,  5.0,   0.999,  1.0, 5.0};
 
         for (size_t i = 0; i < k.size(); ++i) {
-            fvec[i] = model[i] - total_var[i]; 
+            // Inline calculation of the model
+            double model_val = a + b * (rho * (k[i] - m) + sqrt(pow(k[i] - m, 2) + pow(sigma, 2)));
+            fvec[i] = model_val - total_var[i]; 
             
             // Soft-bounds
             for (int j = 0; j < 5; ++j) {
@@ -143,6 +142,7 @@ int main() {
 }
 
 /*
-
-how to run ->g++ main.cpp -o main.exe -I C:\Users\sumit\Downloads\eigen-3.4.0\eigen-3.4.0 -O3
+how to run ->
+g++ main.cpp -o main.exe -I C:\Users\sumit\Downloads\eigen-3.4.0\eigen-3.4.0 -O3
 .\main.exe
+*/
